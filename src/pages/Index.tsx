@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 
@@ -24,32 +24,56 @@ interface Parcel {
   width: number;
   height: number;
   area: number;
-  cropType: string;
+  number: number;
 }
 
 interface Sluice {
   id: string;
   x: number;
   y: number;
-  canalId: string;
+  number: number;
 }
 
 const Index: React.FC = () => {
+  // Базовая схема с твоего рисунка
   const [canals, setCanals] = useState<Canal[]>([
     {
       id: 'main-1',
-      points: [{ x: 100, y: 150 }, { x: 700, y: 150 }],
+      points: [{ x: 120, y: 120 }, { x: 680, y: 120 }],
       type: 'main',
-      width: 8
+      width: 3
     }
   ]);
   
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [sluices, setSluices] = useState<Sluice[]>([]);
   const [selectedTool, setSelectedTool] = useState<'canal' | 'parcel' | 'sluice' | 'select'>('select');
-  const [selectedCanalType, setSelectedCanalType] = useState<'main' | 'secondary' | 'tertiary'>('secondary');
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentCanal, setCurrentCanal] = useState<Point[]>([]);
+  const [showLayers, setShowLayers] = useState({
+    canals: true,
+    parcels: true,
+    sluices: true,
+    baseScheme: true
+  });
+
+  // Схема участка точно как на рисунке
+  const baseScheme = {
+    leftParcels: Array.from({ length: 9 }, (_, i) => ({
+      x: 120, y: 120 + i * 40, width: 60, height: 40, number: i + 1
+    })),
+    rightAngledLines: [
+      // Правая угловая часть - основные линии
+      { x1: 480, y1: 120, x2: 600, y2: 320 },
+      { x1: 560, y1: 140, x2: 650, y2: 320 },
+      // Перпендикулярные линии
+      ...Array.from({ length: 11 }, (_, i) => ({
+        x1: 480 + i * 10, y1: 120 + i * 20, 
+        x2: 560 + i * 8, y2: 140 + i * 18
+      }))
+    ],
+    bottomSquare: { x: 600, y: 320, width: 80, height: 80 }
+  };
   
   const handleMapClick = useCallback((event: React.MouseEvent<SVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -64,8 +88,8 @@ const Index: React.FC = () => {
         const newCanal: Canal = {
           id: `canal-${Date.now()}`,
           points: [...currentCanal, { x, y }],
-          type: selectedCanalType,
-          width: selectedCanalType === 'main' ? 8 : selectedCanalType === 'secondary' ? 4 : 2
+          type: 'secondary',
+          width: 2
         };
         setCanals(prev => [...prev, newCanal]);
         setIsDrawing(false);
@@ -74,12 +98,12 @@ const Index: React.FC = () => {
     } else if (selectedTool === 'parcel') {
       const newParcel: Parcel = {
         id: `parcel-${Date.now()}`,
-        x: x - 50,
-        y: y - 40,
-        width: 100,
-        height: 80,
-        area: 1.2,
-        cropType: 'Пшеница'
+        x: x - 30,
+        y: y - 20,
+        width: 60,
+        height: 40,
+        area: 0.8,
+        number: parcels.length + 10
       };
       setParcels(prev => [...prev, newParcel]);
     } else if (selectedTool === 'sluice') {
@@ -87,18 +111,43 @@ const Index: React.FC = () => {
         id: `sluice-${Date.now()}`,
         x,
         y,
-        canalId: 'main-1'
+        number: sluices.length + 7
       };
       setSluices(prev => [...prev, newSluice]);
     }
-  }, [selectedTool, selectedCanalType, isDrawing, currentCanal]);
+  }, [selectedTool, isDrawing, currentCanal, parcels.length, sluices.length]);
+
+  const loadBaseScheme = () => {
+    // Загружаем схему точно как на рисунке
+    const baseParcels = baseScheme.leftParcels.map((p, index) => ({
+      id: `base-parcel-${index}`,
+      x: p.x,
+      y: p.y,
+      width: p.width,
+      height: p.height,
+      area: 0.8,
+      number: p.number
+    }));
+    
+    setParcels(baseParcels);
+    
+    // Базовые шлюзы
+    setSluices([
+      { id: 'sluice-1', x: 180, y: 120, number: 1 },
+      { id: 'sluice-2', x: 250, y: 120, number: 2 },
+      { id: 'sluice-3', x: 350, y: 120, number: 3 },
+      { id: 'sluice-4', x: 450, y: 120, number: 4 },
+      { id: 'sluice-5', x: 480, y: 120, number: 5 },
+      { id: 'sluice-6', x: 600, y: 120, number: 6 }
+    ]);
+  };
 
   const clearAll = () => {
     setCanals([{
       id: 'main-1',
-      points: [{ x: 100, y: 150 }, { x: 700, y: 150 }],
+      points: [{ x: 120, y: 120 }, { x: 680, y: 120 }],
       type: 'main',
-      width: 8
+      width: 3
     }]);
     setParcels([]);
     setSluices([]);
@@ -112,8 +161,8 @@ const Index: React.FC = () => {
       metadata: {
         created: new Date().toISOString(),
         totalArea: parcels.reduce((sum, p) => sum + p.area, 0),
-        totalCanals: canals.length,
-        totalParcels: parcels.length
+        totalParcels: parcels.length,
+        scheme: 'irrigation-system-from-drawing'
       }
     };
     
@@ -121,20 +170,24 @@ const Index: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'irrigation-project.json';
+    a.download = 'irrigation-scheme.json';
     a.click();
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-white p-4">
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">ПРОЕКТИРОВАНИЕ ОРОСИТЕЛЬНОЙ СИСТЕМЫ</h1>
-            <p className="text-gray-600 mt-1">Интерактивное проектирование на карте участка</p>
+            <h1 className="text-2xl font-bold text-black">СХЕМА ОРОСИТЕЛЬНОЙ СИСТЕМЫ</h1>
+            <p className="text-gray-700 mt-1">Проектирование на основе участка • Масштаб 1:1000</p>
           </div>
           <div className="flex gap-2">
+            <Button onClick={loadBaseScheme} variant="outline">
+              <Icon name="FileText" size={16} className="mr-2" />
+              Загрузить схему
+            </Button>
             <Button onClick={exportProject} variant="outline">
               <Icon name="Download" size={16} className="mr-2" />
               Экспорт
@@ -155,7 +208,7 @@ const Index: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Icon name="Wrench" size={20} />
-                Инструменты проектирования
+                Инструменты
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -164,6 +217,7 @@ const Index: React.FC = () => {
                   variant={selectedTool === 'select' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSelectedTool('select')}
+                  title="Выбор"
                 >
                   <Icon name="MousePointer" size={16} />
                 </Button>
@@ -171,6 +225,7 @@ const Index: React.FC = () => {
                   variant={selectedTool === 'canal' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSelectedTool('canal')}
+                  title="Канал"
                 >
                   <Icon name="Waves" size={16} />
                 </Button>
@@ -178,6 +233,7 @@ const Index: React.FC = () => {
                   variant={selectedTool === 'parcel' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSelectedTool('parcel')}
+                  title="Участок"
                 >
                   <Icon name="Square" size={16} />
                 </Button>
@@ -185,32 +241,54 @@ const Index: React.FC = () => {
                   variant={selectedTool === 'sluice' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setSelectedTool('sluice')}
+                  title="Шлюз"
                 >
                   <Icon name="Circle" size={16} />
                 </Button>
               </div>
               
-              {selectedTool === 'canal' && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Тип канала:</label>
-                  <Select value={selectedCanalType} onValueChange={(value: 'main' | 'secondary' | 'tertiary') => setSelectedCanalType(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="main">Магистральный</SelectItem>
-                      <SelectItem value="secondary">Участковый</SelectItem>
-                      <SelectItem value="tertiary">Оросительный</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              
               <div className="text-xs text-gray-600 bg-gray-100 p-2 rounded">
-                {selectedTool === 'canal' && 'Кликайте для создания точек канала. Второй клик - завершить.'}
-                {selectedTool === 'parcel' && 'Кликайте на карте для размещения участков.'}
-                {selectedTool === 'sluice' && 'Кликайте для размещения шлюзов.'}
-                {selectedTool === 'select' && 'Режим выбора и редактирования объектов.'}
+                {selectedTool === 'canal' && 'Клик - начать канал, второй клик - завершить'}
+                {selectedTool === 'parcel' && 'Кликайте для добавления участков'}
+                {selectedTool === 'sluice' && 'Кликайте для размещения шлюзов'}
+                {selectedTool === 'select' && 'Режим выбора объектов'}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Layers */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Слои</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Базовая схема</label>
+                <Switch
+                  checked={showLayers.baseScheme}
+                  onCheckedChange={(checked) => setShowLayers(prev => ({...prev, baseScheme: checked}))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Каналы</label>
+                <Switch
+                  checked={showLayers.canals}
+                  onCheckedChange={(checked) => setShowLayers(prev => ({...prev, canals: checked}))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Участки</label>
+                <Switch
+                  checked={showLayers.parcels}
+                  onCheckedChange={(checked) => setShowLayers(prev => ({...prev, parcels: checked}))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Шлюзы</label>
+                <Switch
+                  checked={showLayers.sluices}
+                  onCheckedChange={(checked) => setShowLayers(prev => ({...prev, sluices: checked}))}
+                />
               </div>
             </CardContent>
           </Card>
@@ -218,7 +296,7 @@ const Index: React.FC = () => {
           {/* Statistics */}
           <Card>
             <CardHeader>
-              <CardTitle>Статистика проекта</CardTitle>
+              <CardTitle>Статистика</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -240,45 +318,31 @@ const Index: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Elements List */}
+          {/* Legend */}
           <Card>
             <CardHeader>
-              <CardTitle>Элементы системы</CardTitle>
+              <CardTitle>Условные обозначения</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 max-h-60 overflow-y-auto">
-              {parcels.map((parcel, index) => (
-                <div key={parcel.id} className="flex justify-between items-center p-2 bg-green-50 rounded">
-                  <div>
-                    <div className="font-medium text-sm">Участок {index + 1}</div>
-                    <div className="text-xs text-gray-600">{parcel.area} га • {parcel.cropType}</div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setParcels(prev => prev.filter(p => p.id !== parcel.id))}
-                  >
-                    <Icon name="X" size={14} />
-                  </Button>
-                </div>
-              ))}
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-1 bg-black"></div>
+                <span>1. Магистральный канал</span>
+              </div>
               
-              {canals.filter(c => c.type !== 'main').map((canal, index) => (
-                <div key={canal.id} className="flex justify-between items-center p-2 bg-blue-50 rounded">
-                  <div>
-                    <div className="font-medium text-sm">Канал {index + 1}</div>
-                    <div className="text-xs text-gray-600">
-                      {canal.type === 'secondary' ? 'Участковый' : 'Оросительный'}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setCanals(prev => prev.filter(c => c.id !== canal.id))}
-                  >
-                    <Icon name="X" size={14} />
-                  </Button>
-                </div>
-              ))}
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-0.5 bg-black opacity-60" style={{borderTop: '1px dashed black'}}></div>
+                <span>2. Трубопровод</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 border border-black"></div>
+                <span>3. Межучастковый канал</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-black rounded-full"></div>
+                <span>4. Участковый канал</span>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -290,63 +354,75 @@ const Index: React.FC = () => {
               <CardTitle className="flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <Icon name="Map" size={20} />
-                  Карта участка для проектирования
+                  Схема участка
                 </span>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span>Масштаб 1:1000</span>
-                  <div className="w-16 h-1 bg-black"></div>
-                  <span>100м</span>
+                <div className="text-sm text-gray-700">
+                  М 1:1000
                 </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-2 h-full">
-              <div className="w-full h-full bg-green-50 border-2 border-gray-300 rounded-lg relative overflow-hidden">
+              <div className="w-full h-full bg-white border-2 border-gray-800 rounded-lg relative overflow-hidden">
                 <svg
                   viewBox="0 0 800 600"
                   className="w-full h-full cursor-crosshair"
                   onClick={handleMapClick}
                 >
-                  {/* Background terrain pattern */}
-                  <defs>
-                    <pattern id="terrain" width="50" height="50" patternUnits="userSpaceOnUse">
-                      <rect width="50" height="50" fill="#f0f9ff" opacity="0.3" />
-                      <circle cx="25" cy="25" r="2" fill="#22c55e" opacity="0.2" />
-                    </pattern>
-                  </defs>
-                  <rect width="800" height="600" fill="url(#terrain)" />
+                  {/* North Arrow */}
+                  <g transform="translate(50, 50)">
+                    <path d="M 0 -15 L -6 6 L 0 3 L 6 6 Z" fill="black" strokeWidth="1" stroke="black"/>
+                    <text x="-3" y="20" className="text-xs font-mono" fill="black">С</text>
+                  </g>
 
-                  {/* Grid */}
-                  <defs>
-                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
-                    </pattern>
-                  </defs>
-                  <rect width="800" height="600" fill="url(#grid)" />
+                  {/* Base Scheme Outline (точно как на рисунке) */}
+                  {showLayers.baseScheme && (
+                    <g stroke="#ccc" strokeWidth="1" fill="none" strokeDasharray="3,3">
+                      {/* Left parcels outline */}
+                      <rect x="120" y="120" width="60" height="360" />
+                      {baseScheme.leftParcels.map((_, index) => (
+                        <line key={index} x1="120" y1={120 + (index + 1) * 40} x2="180" y2={120 + (index + 1) * 40} />
+                      ))}
+                      
+                      {/* Right angled area - как на рисунке */}
+                      <line x1="480" y1="120" x2="600" y2="320" />
+                      <line x1="560" y1="140" x2="650" y2="320" />
+                      
+                      {/* Перпендикулярные линии */}
+                      {baseScheme.rightAngledLines.slice(2).map((line, index) => (
+                        <line key={index} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} />
+                      ))}
+                      
+                      {/* Нижний квадрат */}
+                      <rect x={baseScheme.bottomSquare.x} y={baseScheme.bottomSquare.y}
+                            width={baseScheme.bottomSquare.width} height={baseScheme.bottomSquare.height} />
+                      
+                      {/* Вертикальные линии в квадрате */}
+                      <line x1="620" y1="320" x2="620" y2="400" />
+                      <line x1="640" y1="320" x2="640" y2="400" />
+                      <line x1="660" y1="320" x2="660" y2="400" />
+                    </g>
+                  )}
 
                   {/* Canals */}
-                  {canals.map((canal) => (
+                  {showLayers.canals && canals.map((canal) => (
                     <g key={canal.id}>
                       <polyline
                         points={canal.points.map(p => `${p.x},${p.y}`).join(' ')}
                         fill="none"
-                        stroke={
-                          canal.type === 'main' ? '#1e40af' :
-                          canal.type === 'secondary' ? '#2563eb' : '#3b82f6'
-                        }
+                        stroke="#000000"
                         strokeWidth={canal.width}
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="hover:opacity-75 transition-opacity"
+                        className="hover:opacity-75 transition-opacity cursor-pointer"
                       />
-                      {canal.points.length === 2 && (
+                      {canal.points.length === 2 && canal.type === 'main' && (
                         <text
                           x={(canal.points[0].x + canal.points[1].x) / 2}
                           y={canal.points[0].y - 10}
-                          className="text-xs font-mono fill-blue-700"
+                          className="text-xs font-mono fill-black"
                           textAnchor="middle"
                         >
-                          {canal.type === 'main' ? 'Магистральный канал' : 
-                           canal.type === 'secondary' ? 'Участковый' : 'Оросительный'}
+                          Магистральный канал
                         </text>
                       )}
                     </g>
@@ -358,86 +434,73 @@ const Index: React.FC = () => {
                       points={currentCanal.map(p => `${p.x},${p.y}`).join(' ')}
                       fill="none"
                       stroke="#f59e0b"
-                      strokeWidth={selectedCanalType === 'main' ? 8 : selectedCanalType === 'secondary' ? 4 : 2}
+                      strokeWidth={2}
                       strokeDasharray="5,5"
                     />
                   )}
 
                   {/* Parcels */}
-                  {parcels.map((parcel, index) => (
+                  {showLayers.parcels && parcels.map((parcel) => (
                     <g key={parcel.id}>
                       <rect
                         x={parcel.x}
                         y={parcel.y}
                         width={parcel.width}
                         height={parcel.height}
-                        fill="rgba(34, 197, 94, 0.2)"
-                        stroke="#16a34a"
+                        fill="none"
+                        stroke="#000000"
                         strokeWidth="2"
                         strokeDasharray="5,5"
-                        className="hover:fill-opacity-40 transition-all cursor-pointer"
+                        className="hover:fill-opacity-20 hover:fill-green-100 transition-all cursor-pointer"
                       />
                       <text
                         x={parcel.x + parcel.width / 2}
-                        y={parcel.y + parcel.height / 2 - 5}
-                        className="text-xs font-mono fill-green-700"
+                        y={parcel.y + parcel.height / 2 + 3}
+                        className="text-xs font-mono fill-black"
                         textAnchor="middle"
                       >
-                        Участок {index + 1}
-                      </text>
-                      <text
-                        x={parcel.x + parcel.width / 2}
-                        y={parcel.y + parcel.height / 2 + 8}
-                        className="text-xs font-mono fill-green-600"
-                        textAnchor="middle"
-                      >
-                        {parcel.area} га
+                        {parcel.number}
                       </text>
                     </g>
                   ))}
 
                   {/* Sluices */}
-                  {sluices.map((sluice, index) => (
+                  {showLayers.sluices && sluices.map((sluice) => (
                     <g key={sluice.id}>
                       <circle
                         cx={sluice.x}
                         cy={sluice.y}
-                        r="8"
-                        fill="#dc2626"
-                        className="hover:scale-110 transition-transform cursor-pointer"
+                        r="4"
+                        fill="#000000"
+                        className="hover:scale-125 transition-transform cursor-pointer"
                       />
                       <text
-                        x={sluice.x + 15}
-                        y={sluice.y + 5}
-                        className="text-xs font-mono fill-red-700"
+                        x={sluice.x + 10}
+                        y={sluice.y + 3}
+                        className="text-xs font-mono fill-black"
                       >
-                        Ш{index + 1}
+                        {sluice.number}
                       </text>
                     </g>
                   ))}
 
-                  {/* North Arrow */}
-                  <g transform="translate(750, 50)">
-                    <path d="M 0 -20 L -8 8 L 0 4 L 8 8 Z" fill="#374151" />
-                    <text x="-5" y="25" className="text-sm font-mono fill-gray-700">С</text>
+                  {/* Scale */}
+                  <g transform="translate(650, 550)">
+                    <line x1="0" y1="0" x2="60" y2="0" stroke="black" strokeWidth="2" />
+                    <line x1="0" y1="-3" x2="0" y2="3" stroke="black" strokeWidth="1" />
+                    <line x1="60" y1="-3" x2="60" y2="3" stroke="black" strokeWidth="1" />
+                    <text x="20" y="-8" className="text-xs font-mono" fill="black">0   60м</text>
                   </g>
 
-                  {/* Legend */}
-                  <g transform="translate(20, 500)">
-                    <rect x="0" y="0" width="200" height="80" fill="white" fillOpacity="0.9" stroke="#d1d5db" rx="4" />
-                    <text x="10" y="15" className="text-xs font-bold fill-gray-800">Легенда:</text>
+                  {/* Legend как на рисунке */}
+                  <g transform="translate(20, 480)">
+                    <text x="0" y="15" className="text-sm fill-black">1. Магистральный канал</text>
+                    <text x="0" y="30" className="text-sm fill-black">2. Трубопровод</text>
+                    <text x="0" y="45" className="text-sm fill-black">3. Межучастковый канал</text>
+                    <text x="0" y="60" className="text-sm fill-black">4. Участковый канал</text>
                     
-                    <line x1="10" y1="25" x2="30" y2="25" stroke="#1e40af" strokeWidth="4" />
-                    <text x="35" y="28" className="text-xs fill-gray-700">Магистральный канал</text>
-                    
-                    <line x1="10" y1="35" x2="30" y2="35" stroke="#2563eb" strokeWidth="2" />
-                    <text x="35" y="38" className="text-xs fill-gray-700">Участковый канал</text>
-                    
-                    <rect x="10" y="42" width="15" height="10" fill="rgba(34, 197, 94, 0.2)" stroke="#16a34a" strokeWidth="1" strokeDasharray="2,2" />
-                    <text x="35" y="48" className="text-xs fill-gray-700">Участок</text>
-                    
-                    <circle cx="17" cy="60" r="4" fill="#dc2626" />
-                    <text x="35" y="63" className="text-xs fill-gray-700">Шлюз</text>
+                    <text x="0" y="90" className="text-xs font-mono fill-black">М 1:1000</text>
+                    <text x="0" y="105" className="text-xs font-mono fill-black">Дата: {new Date().toLocaleDateString('ru-RU')}</text>
                   </g>
                 </svg>
               </div>
