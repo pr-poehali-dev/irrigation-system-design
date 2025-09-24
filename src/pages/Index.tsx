@@ -24,6 +24,10 @@ const Index: React.FC = () => {
     setLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="min-h-screen bg-white p-8">
       {/* Header */}
@@ -31,13 +35,19 @@ const Index: React.FC = () => {
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-black mb-2">СХЕМА ОРОСИТЕЛЬНОЙ СИСТЕМЫ</h1>
           <p className="text-sm text-gray-700">Участок № 1 • Масштаб 1:1000 • М 1:1000</p>
+          <div className="mt-4 print:hidden">
+            <Button onClick={handlePrint} className="flex items-center gap-2">
+              <Icon name="Printer" size={20} />
+              Печать схемы А4
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto flex gap-8">
+      <div className="max-w-7xl mx-auto flex gap-8 print:block">
         {/* Main Drawing Area */}
-        <div className="flex-1">
-          <div className="bg-white border-2 border-gray-800 aspect-[4/3] relative">
+        <div className="flex-1 print:w-full print:max-w-none">
+          <div className="bg-white border-2 border-gray-800 aspect-[4/3] relative print:border-black print:border-2 print:aspect-[1.414/1] print:h-[297mm] print:w-[210mm] print:mx-auto">
             <svg
               viewBox="0 0 800 600"
               className="w-full h-full"
@@ -164,7 +174,7 @@ const Index: React.FC = () => {
         </div>
 
         {/* Right Panel with Legend and Controls */}
-        <div className="w-80 space-y-6">
+        <div className="w-80 space-y-6 print:hidden">
           {/* Layer Controls */}
           <Card>
             <CardHeader>
