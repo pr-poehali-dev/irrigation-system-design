@@ -1,307 +1,450 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 
-interface LayerState {
-  mainChannels: boolean;
-  parcels: boolean;
-  sluices: boolean;
-  pipes: boolean;
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Canal {
+  id: string;
+  points: Point[];
+  type: 'main' | 'secondary' | 'tertiary';
+  width: number;
+}
+
+interface Parcel {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  area: number;
+  cropType: string;
+}
+
+interface Sluice {
+  id: string;
+  x: number;
+  y: number;
+  canalId: string;
 }
 
 const Index: React.FC = () => {
-  const [layers, setLayers] = useState<LayerState>({
-    mainChannels: true,
-    parcels: true,
-    sluices: true,
-    pipes: true,
-  });
+  const [canals, setCanals] = useState<Canal[]>([
+    {
+      id: 'main-1',
+      points: [{ x: 100, y: 150 }, { x: 700, y: 150 }],
+      type: 'main',
+      width: 8
+    }
+  ]);
+  
+  const [parcels, setParcels] = useState<Parcel[]>([]);
+  const [sluices, setSluices] = useState<Sluice[]>([]);
+  const [selectedTool, setSelectedTool] = useState<'canal' | 'parcel' | 'sluice' | 'select'>('select');
+  const [selectedCanalType, setSelectedCanalType] = useState<'main' | 'secondary' | 'tertiary'>('secondary');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentCanal, setCurrentCanal] = useState<Point[]>([]);
+  
+  const handleMapClick = useCallback((event: React.MouseEvent<SVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 800;
+    const y = ((event.clientY - rect.top) / rect.height) * 600;
 
-  const toggleLayer = (layer: keyof LayerState) => {
-    setLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
+    if (selectedTool === 'canal') {
+      if (!isDrawing) {
+        setIsDrawing(true);
+        setCurrentCanal([{ x, y }]);
+      } else {
+        const newCanal: Canal = {
+          id: `canal-${Date.now()}`,
+          points: [...currentCanal, { x, y }],
+          type: selectedCanalType,
+          width: selectedCanalType === 'main' ? 8 : selectedCanalType === 'secondary' ? 4 : 2
+        };
+        setCanals(prev => [...prev, newCanal]);
+        setIsDrawing(false);
+        setCurrentCanal([]);
+      }
+    } else if (selectedTool === 'parcel') {
+      const newParcel: Parcel = {
+        id: `parcel-${Date.now()}`,
+        x: x - 50,
+        y: y - 40,
+        width: 100,
+        height: 80,
+        area: 1.2,
+        cropType: 'Пшеница'
+      };
+      setParcels(prev => [...prev, newParcel]);
+    } else if (selectedTool === 'sluice') {
+      const newSluice: Sluice = {
+        id: `sluice-${Date.now()}`,
+        x,
+        y,
+        canalId: 'main-1'
+      };
+      setSluices(prev => [...prev, newSluice]);
+    }
+  }, [selectedTool, selectedCanalType, isDrawing, currentCanal]);
+
+  const clearAll = () => {
+    setCanals([{
+      id: 'main-1',
+      points: [{ x: 100, y: 150 }, { x: 700, y: 150 }],
+      type: 'main',
+      width: 8
+    }]);
+    setParcels([]);
+    setSluices([]);
   };
 
-  const handlePrint = () => {
-    window.print();
+  const exportProject = () => {
+    const project = {
+      canals,
+      parcels,
+      sluices,
+      metadata: {
+        created: new Date().toISOString(),
+        totalArea: parcels.reduce((sum, p) => sum + p.area, 0),
+        totalCanals: canals.length,
+        totalParcels: parcels.length
+      }
+    };
+    
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'irrigation-project.json';
+    a.click();
   };
 
   return (
-    <div className="min-h-screen bg-white p-8 print:p-4">
+    <div className="min-h-screen bg-gray-50 p-4">
       {/* Header */}
-      <div className="max-w-7xl mx-auto mb-8 print:mb-4">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-black mb-2 print:text-xl">СХЕМА ОРОСИТЕЛЬНОЙ СИСТЕМЫ</h1>
-          <p className="text-sm text-gray-700 print:text-xs">Участок № 1 • Масштаб 1:1000</p>
-          <div className="mt-4 print:hidden">
-            <Button onClick={handlePrint} className="flex items-center gap-2">
-              <Icon name="Printer" size={20} />
-              Печать схемы А4
+      <div className="max-w-7xl mx-auto mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">ПРОЕКТИРОВАНИЕ ОРОСИТЕЛЬНОЙ СИСТЕМЫ</h1>
+            <p className="text-gray-600 mt-1">Интерактивное проектирование на карте участка</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={exportProject} variant="outline">
+              <Icon name="Download" size={16} className="mr-2" />
+              Экспорт
+            </Button>
+            <Button onClick={clearAll} variant="destructive">
+              <Icon name="Trash2" size={16} className="mr-2" />
+              Очистить
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto flex gap-8 print:block">
-        {/* Main Drawing Area */}
-        <div className="flex-1 print:w-full print:max-w-none">
-          <div className="bg-white border-2 border-gray-800 aspect-[4/3] relative print:border-black print:aspect-[1.414/1]">
-            <svg
-              viewBox="0 0 800 600"
-              className="w-full h-full"
-            >
-              {/* North Arrow */}
-              <g transform="translate(50, 50)">
-                <path d="M 0 -15 L -6 6 L 0 3 L 6 6 Z" fill="black" strokeWidth="1" stroke="black"/>
-                <text x="-3" y="20" className="text-xs font-mono print:text-[10px]" fill="black">С</text>
-              </g>
-
-              {/* Main Canal - Horizontal line at top */}
-              {layers.mainChannels && (
-                <>
-                  <line x1="120" y1="120" x2="680" y2="120" stroke="black" strokeWidth="3" />
-                  <text x="350" y="110" className="text-xs font-mono print:text-[10px]" fill="black">Магистральный канал</text>
-                </>
-              )}
-
-              {/* Parcels - Exact layout like in reference */}
-              {layers.parcels && (
-                <>
-                  {/* Left side linear parcels */}
-                  <g>
-                    {/* Main vertical line on left */}
-                    <line x1="180" y1="120" x2="180" y2="480" stroke="black" strokeWidth="2" />
-                    <line x1="120" y1="120" x2="120" y2="480" stroke="black" strokeWidth="2" />
-                    
-                    {/* Horizontal divisions creating strips */}
-                    <line x1="120" y1="160" x2="180" y2="160" stroke="black" strokeWidth="1" />
-                    <line x1="120" y1="200" x2="180" y2="200" stroke="black" strokeWidth="1" />
-                    <line x1="120" y1="240" x2="180" y2="240" stroke="black" strokeWidth="1" />
-                    <line x1="120" y1="280" x2="180" y2="280" stroke="black" strokeWidth="1" />
-                    <line x1="120" y1="320" x2="180" y2="320" stroke="black" strokeWidth="1" />
-                    <line x1="120" y1="360" x2="180" y2="360" stroke="black" strokeWidth="1" />
-                    <line x1="120" y1="400" x2="180" y2="400" stroke="black" strokeWidth="1" />
-                    <line x1="120" y1="440" x2="180" y2="440" stroke="black" strokeWidth="1" />
-                    
-                    {/* Bottom closure */}
-                    <line x1="120" y1="480" x2="180" y2="480" stroke="black" strokeWidth="2" />
-                    
-                    {/* Parcel numbers for left side */}
-                    <text x="140" y="145" className="text-xs font-mono print:text-[9px]" fill="black">1</text>
-                    <text x="140" y="185" className="text-xs font-mono print:text-[9px]" fill="black">2</text>
-                    <text x="140" y="225" className="text-xs font-mono print:text-[9px]" fill="black">3</text>
-                    <text x="140" y="265" className="text-xs font-mono print:text-[9px]" fill="black">4</text>
-                    <text x="140" y="305" className="text-xs font-mono print:text-[9px]" fill="black">5</text>
-                    <text x="140" y="345" className="text-xs font-mono print:text-[9px]" fill="black">6</text>
-                    <text x="140" y="385" className="text-xs font-mono print:text-[9px]" fill="black">7</text>
-                    <text x="140" y="425" className="text-xs font-mono print:text-[9px]" fill="black">8</text>
-                    <text x="140" y="465" className="text-xs font-mono print:text-[9px]" fill="black">9</text>
-                  </g>
-
-                  {/* Right side angled parcels - matching the reference drawing */}
-                  <g>
-                    {/* Main angled boundary */}
-                    <line x1="480" y1="120" x2="600" y2="320" stroke="black" strokeWidth="2" />
-                    
-                    {/* Parallel angled divisions */}
-                    <line x1="480" y1="120" x2="560" y2="140" stroke="black" strokeWidth="1" />
-                    <line x1="490" y1="140" x2="570" y2="160" stroke="black" strokeWidth="1" />
-                    <line x1="500" y1="160" x2="580" y2="180" stroke="black" strokeWidth="1" />
-                    <line x1="510" y1="180" x2="590" y2="200" stroke="black" strokeWidth="1" />
-                    <line x1="520" y1="200" x2="600" y2="220" stroke="black" strokeWidth="1" />
-                    <line x1="530" y1="220" x2="610" y2="240" stroke="black" strokeWidth="1" />
-                    <line x1="540" y1="240" x2="620" y2="260" stroke="black" strokeWidth="1" />
-                    <line x1="550" y1="260" x2="630" y2="280" stroke="black" strokeWidth="1" />
-                    <line x1="560" y1="280" x2="640" y2="300" stroke="black" strokeWidth="1" />
-                    <line x1="570" y1="300" x2="650" y2="320" stroke="black" strokeWidth="1" />
-                    
-                    {/* Right boundary */}
-                    <line x1="560" y1="140" x2="650" y2="320" stroke="black" strokeWidth="2" />
-                    
-                    {/* Square section at bottom right like in reference */}
-                    <rect x="600" y="320" width="80" height="80" fill="none" stroke="black" strokeWidth="2" />
-                    <line x1="620" y1="320" x2="620" y2="400" stroke="black" strokeWidth="1" />
-                    <line x1="640" y1="320" x2="640" y2="400" stroke="black" strokeWidth="1" />
-                    <line x1="660" y1="320" x2="660" y2="400" stroke="black" strokeWidth="1" />
-                    
-                    {/* Parcel numbers for angled section */}
-                    <text x="500" y="135" className="text-xs font-mono print:text-[9px]" fill="black">10</text>
-                    <text x="510" y="155" className="text-xs font-mono print:text-[9px]" fill="black">11</text>
-                    <text x="520" y="175" className="text-xs font-mono print:text-[9px]" fill="black">12</text>
-                    <text x="530" y="195" className="text-xs font-mono print:text-[9px]" fill="black">13</text>
-                    <text x="540" y="215" className="text-xs font-mono print:text-[9px]" fill="black">14</text>
-                    <text x="550" y="235" className="text-xs font-mono print:text-[9px]" fill="black">15</text>
-                    <text x="560" y="255" className="text-xs font-mono print:text-[9px]" fill="black">16</text>
-                    <text x="570" y="275" className="text-xs font-mono print:text-[9px]" fill="black">17</text>
-                    <text x="580" y="295" className="text-xs font-mono print:text-[9px]" fill="black">18</text>
-                    
-                    {/* Numbers in square sections */}
-                    <text x="608" y="345" className="text-xs font-mono print:text-[9px]" fill="black">19</text>
-                    <text x="628" y="345" className="text-xs font-mono print:text-[9px]" fill="black">20</text>
-                    <text x="648" y="345" className="text-xs font-mono print:text-[9px]" fill="black">21</text>
-                    <text x="668" y="345" className="text-xs font-mono print:text-[9px]" fill="black">22</text>
-                    
-                    <text x="608" y="375" className="text-xs font-mono print:text-[9px]" fill="black">23</text>
-                    <text x="628" y="375" className="text-xs font-mono print:text-[9px]" fill="black">24</text>
-                    <text x="648" y="375" className="text-xs font-mono print:text-[9px]" fill="black">25</text>
-                    <text x="668" y="375" className="text-xs font-mono print:text-[9px]" fill="black">26</text>
-                  </g>
-                </>
-              )}
-
-              {/* Sluices - connection points */}
-              {layers.sluices && (
-                <>
-                  <circle cx="180" cy="120" r="4" fill="black" />
-                  <circle cx="250" cy="120" r="4" fill="black" />
-                  <circle cx="350" cy="120" r="4" fill="black" />
-                  <circle cx="450" cy="120" r="4" fill="black" />
-                  <circle cx="480" cy="120" r="4" fill="black" />
-                  <circle cx="600" cy="120" r="4" fill="black" />
-                </>
-              )}
-
-              {/* Connecting lines from canal to parcels */}
-              {layers.pipes && (
-                <>
-                  <line x1="250" y1="120" x2="250" y2="200" stroke="black" strokeWidth="1" strokeDasharray="2,2" />
-                  <line x1="350" y1="120" x2="350" y2="200" stroke="black" strokeWidth="1" strokeDasharray="2,2" />
-                  <line x1="450" y1="120" x2="450" y2="200" stroke="black" strokeWidth="1" strokeDasharray="2,2" />
-                </>
-              )}
-
-              {/* Scale */}
-              <g transform="translate(650, 550)">
-                <line x1="0" y1="0" x2="60" y2="0" stroke="black" strokeWidth="2" />
-                <line x1="0" y1="-3" x2="0" y2="3" stroke="black" strokeWidth="1" />
-                <line x1="60" y1="-3" x2="60" y2="3" stroke="black" strokeWidth="1" />
-                <text x="15" y="-8" className="text-xs font-mono print:text-[10px]" fill="black">0  60м</text>
-              </g>
-            </svg>
-          </div>
-        </div>
-
-        {/* Right Panel - hidden on print */}
-        <div className="w-80 space-y-6 print:hidden">
-          {/* Layer Controls */}
+      <div className="max-w-7xl mx-auto grid grid-cols-12 gap-6">
+        {/* Tools Panel */}
+        <div className="col-span-3 space-y-4">
+          {/* Tool Selection */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Icon name="Layers" size={20} />
-                Слои чертежа
+              <CardTitle className="flex items-center gap-2">
+                <Icon name="Wrench" size={20} />
+                Инструменты проектирования
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Магистральный канал</label>
-                <Switch
-                  checked={layers.mainChannels}
-                  onCheckedChange={() => toggleLayer('mainChannels')}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Участки</label>
-                <Switch
-                  checked={layers.parcels}
-                  onCheckedChange={() => toggleLayer('parcels')}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Шлюзы</label>
-                <Switch
-                  checked={layers.sluices}
-                  onCheckedChange={() => toggleLayer('sluices')}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Трубопроводы</label>
-                <Switch
-                  checked={layers.pipes}
-                  onCheckedChange={() => toggleLayer('pipes')}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Legend matching the handwritten one */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Условные обозначения</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-0.5 bg-black"></div>
-                <span>1. Магистральный канал</span>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={selectedTool === 'select' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedTool('select')}
+                >
+                  <Icon name="MousePointer" size={16} />
+                </Button>
+                <Button
+                  variant={selectedTool === 'canal' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedTool('canal')}
+                >
+                  <Icon name="Waves" size={16} />
+                </Button>
+                <Button
+                  variant={selectedTool === 'parcel' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedTool('parcel')}
+                >
+                  <Icon name="Square" size={16} />
+                </Button>
+                <Button
+                  variant={selectedTool === 'sluice' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedTool('sluice')}
+                >
+                  <Icon name="Circle" size={16} />
+                </Button>
               </div>
               
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-0.5 bg-black opacity-60" style={{borderTop: '1px dashed black'}}></div>
-                <span>2. Трубопровод</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="w-4 h-4 border border-black"></div>
-                <span>3. Межучастковый канал</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-black rounded-full"></div>
-                <span>4. Участковый канал</span>
-              </div>
-
-              <div className="mt-6 pt-4 border-t font-mono text-xs text-gray-600">
-                <p>М 1:1000</p>
-                <p>Лист 1 из 1</p>
-                <p>Дата: {new Date().toLocaleDateString('ru-RU')}</p>
+              {selectedTool === 'canal' && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Тип канала:</label>
+                  <Select value={selectedCanalType} onValueChange={(value: 'main' | 'secondary' | 'tertiary') => setSelectedCanalType(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="main">Магистральный</SelectItem>
+                      <SelectItem value="secondary">Участковый</SelectItem>
+                      <SelectItem value="tertiary">Оросительный</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              <div className="text-xs text-gray-600 bg-gray-100 p-2 rounded">
+                {selectedTool === 'canal' && 'Кликайте для создания точек канала. Второй клик - завершить.'}
+                {selectedTool === 'parcel' && 'Кликайте на карте для размещения участков.'}
+                {selectedTool === 'sluice' && 'Кликайте для размещения шлюзов.'}
+                {selectedTool === 'select' && 'Режим выбора и редактирования объектов.'}
               </div>
             </CardContent>
           </Card>
 
-          {/* Technical Information */}
+          {/* Statistics */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Техническая информация</CardTitle>
+              <CardTitle>Статистика проекта</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm font-mono">
-              <div className="flex justify-between border-b pb-1">
-                <span>Общее кол-во участков:</span>
-                <span>26</span>
-              </div>
-              <div className="flex justify-between border-b pb-1">
-                <span>Кол-во шлюзов:</span>
-                <span>6</span>
-              </div>
-              <div className="flex justify-between border-b pb-1">
-                <span>Длина маг. канала:</span>
-                <span>560 м</span>
-              </div>
-              <div className="flex justify-between border-b pb-1">
-                <span>Общая площадь:</span>
-                <span>18.2 га</span>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Каналов:</span>
+                <Badge variant="secondary">{canals.length}</Badge>
               </div>
               <div className="flex justify-between">
-                <span>Тип орошения:</span>
-                <span>Поверхностное</span>
+                <span>Участков:</span>
+                <Badge variant="secondary">{parcels.length}</Badge>
+              </div>
+              <div className="flex justify-between">
+                <span>Шлюзов:</span>
+                <Badge variant="secondary">{sluices.length}</Badge>
+              </div>
+              <div className="flex justify-between">
+                <span>Общая площадь:</span>
+                <Badge>{parcels.reduce((sum, p) => sum + p.area, 0).toFixed(1)} га</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Elements List */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Элементы системы</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 max-h-60 overflow-y-auto">
+              {parcels.map((parcel, index) => (
+                <div key={parcel.id} className="flex justify-between items-center p-2 bg-green-50 rounded">
+                  <div>
+                    <div className="font-medium text-sm">Участок {index + 1}</div>
+                    <div className="text-xs text-gray-600">{parcel.area} га • {parcel.cropType}</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setParcels(prev => prev.filter(p => p.id !== parcel.id))}
+                  >
+                    <Icon name="X" size={14} />
+                  </Button>
+                </div>
+              ))}
+              
+              {canals.filter(c => c.type !== 'main').map((canal, index) => (
+                <div key={canal.id} className="flex justify-between items-center p-2 bg-blue-50 rounded">
+                  <div>
+                    <div className="font-medium text-sm">Канал {index + 1}</div>
+                    <div className="text-xs text-gray-600">
+                      {canal.type === 'secondary' ? 'Участковый' : 'Оросительный'}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setCanals(prev => prev.filter(c => c.id !== canal.id))}
+                  >
+                    <Icon name="X" size={14} />
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Map Area */}
+        <div className="col-span-9">
+          <Card className="h-[700px]">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Icon name="Map" size={20} />
+                  Карта участка для проектирования
+                </span>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span>Масштаб 1:1000</span>
+                  <div className="w-16 h-1 bg-black"></div>
+                  <span>100м</span>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-2 h-full">
+              <div className="w-full h-full bg-green-50 border-2 border-gray-300 rounded-lg relative overflow-hidden">
+                <svg
+                  viewBox="0 0 800 600"
+                  className="w-full h-full cursor-crosshair"
+                  onClick={handleMapClick}
+                >
+                  {/* Background terrain pattern */}
+                  <defs>
+                    <pattern id="terrain" width="50" height="50" patternUnits="userSpaceOnUse">
+                      <rect width="50" height="50" fill="#f0f9ff" opacity="0.3" />
+                      <circle cx="25" cy="25" r="2" fill="#22c55e" opacity="0.2" />
+                    </pattern>
+                  </defs>
+                  <rect width="800" height="600" fill="url(#terrain)" />
+
+                  {/* Grid */}
+                  <defs>
+                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
+                    </pattern>
+                  </defs>
+                  <rect width="800" height="600" fill="url(#grid)" />
+
+                  {/* Canals */}
+                  {canals.map((canal) => (
+                    <g key={canal.id}>
+                      <polyline
+                        points={canal.points.map(p => `${p.x},${p.y}`).join(' ')}
+                        fill="none"
+                        stroke={
+                          canal.type === 'main' ? '#1e40af' :
+                          canal.type === 'secondary' ? '#2563eb' : '#3b82f6'
+                        }
+                        strokeWidth={canal.width}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="hover:opacity-75 transition-opacity"
+                      />
+                      {canal.points.length === 2 && (
+                        <text
+                          x={(canal.points[0].x + canal.points[1].x) / 2}
+                          y={canal.points[0].y - 10}
+                          className="text-xs font-mono fill-blue-700"
+                          textAnchor="middle"
+                        >
+                          {canal.type === 'main' ? 'Магистральный канал' : 
+                           canal.type === 'secondary' ? 'Участковый' : 'Оросительный'}
+                        </text>
+                      )}
+                    </g>
+                  ))}
+
+                  {/* Current drawing canal */}
+                  {isDrawing && currentCanal.length > 0 && (
+                    <polyline
+                      points={currentCanal.map(p => `${p.x},${p.y}`).join(' ')}
+                      fill="none"
+                      stroke="#f59e0b"
+                      strokeWidth={selectedCanalType === 'main' ? 8 : selectedCanalType === 'secondary' ? 4 : 2}
+                      strokeDasharray="5,5"
+                    />
+                  )}
+
+                  {/* Parcels */}
+                  {parcels.map((parcel, index) => (
+                    <g key={parcel.id}>
+                      <rect
+                        x={parcel.x}
+                        y={parcel.y}
+                        width={parcel.width}
+                        height={parcel.height}
+                        fill="rgba(34, 197, 94, 0.2)"
+                        stroke="#16a34a"
+                        strokeWidth="2"
+                        strokeDasharray="5,5"
+                        className="hover:fill-opacity-40 transition-all cursor-pointer"
+                      />
+                      <text
+                        x={parcel.x + parcel.width / 2}
+                        y={parcel.y + parcel.height / 2 - 5}
+                        className="text-xs font-mono fill-green-700"
+                        textAnchor="middle"
+                      >
+                        Участок {index + 1}
+                      </text>
+                      <text
+                        x={parcel.x + parcel.width / 2}
+                        y={parcel.y + parcel.height / 2 + 8}
+                        className="text-xs font-mono fill-green-600"
+                        textAnchor="middle"
+                      >
+                        {parcel.area} га
+                      </text>
+                    </g>
+                  ))}
+
+                  {/* Sluices */}
+                  {sluices.map((sluice, index) => (
+                    <g key={sluice.id}>
+                      <circle
+                        cx={sluice.x}
+                        cy={sluice.y}
+                        r="8"
+                        fill="#dc2626"
+                        className="hover:scale-110 transition-transform cursor-pointer"
+                      />
+                      <text
+                        x={sluice.x + 15}
+                        y={sluice.y + 5}
+                        className="text-xs font-mono fill-red-700"
+                      >
+                        Ш{index + 1}
+                      </text>
+                    </g>
+                  ))}
+
+                  {/* North Arrow */}
+                  <g transform="translate(750, 50)">
+                    <path d="M 0 -20 L -8 8 L 0 4 L 8 8 Z" fill="#374151" />
+                    <text x="-5" y="25" className="text-sm font-mono fill-gray-700">С</text>
+                  </g>
+
+                  {/* Legend */}
+                  <g transform="translate(20, 500)">
+                    <rect x="0" y="0" width="200" height="80" fill="white" fillOpacity="0.9" stroke="#d1d5db" rx="4" />
+                    <text x="10" y="15" className="text-xs font-bold fill-gray-800">Легенда:</text>
+                    
+                    <line x1="10" y1="25" x2="30" y2="25" stroke="#1e40af" strokeWidth="4" />
+                    <text x="35" y="28" className="text-xs fill-gray-700">Магистральный канал</text>
+                    
+                    <line x1="10" y1="35" x2="30" y2="35" stroke="#2563eb" strokeWidth="2" />
+                    <text x="35" y="38" className="text-xs fill-gray-700">Участковый канал</text>
+                    
+                    <rect x="10" y="42" width="15" height="10" fill="rgba(34, 197, 94, 0.2)" stroke="#16a34a" strokeWidth="1" strokeDasharray="2,2" />
+                    <text x="35" y="48" className="text-xs fill-gray-700">Участок</text>
+                    
+                    <circle cx="17" cy="60" r="4" fill="#dc2626" />
+                    <text x="35" y="63" className="text-xs fill-gray-700">Шлюз</text>
+                  </g>
+                </svg>
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
-      
-      {/* Print styles */}
-      <style jsx>{`
-        @media print {
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-          body {
-            -webkit-print-color-adjust: exact;
-            color-adjust: exact;
-          }
-        }
-      `}</style>
     </div>
   );
 };
